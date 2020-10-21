@@ -1,0 +1,78 @@
+apiVersion: 1.0.0
+metadata:
+  name: quarkus-command-mode-je08q
+projects:
+  - name: quarkus-tutorial
+    source:
+      location: 'https://github.com/owidjaya/quarkus-tutorial.git'
+      type: git
+      branch: main
+components:
+  - id: redhat/quarkus-java11/latest
+    type: chePlugin
+  - mountSources: true
+    memoryLimit: 4927M
+    type: dockerimage
+    volumes:
+      - name: m2
+        containerPath: /home/user/.m2
+    image: 'quay.io/eclipse/che-quarkus:7.20.0'
+    alias: centos-quarkus-maven
+    env:
+      - value: '-XX:MaxRAMPercentage=50.0 -XX:+UseParallelGC -XX:MinHeapFreeRatio=10 -XX:MaxHeapFreeRatio=20 -XX:GCTimeRatio=4 -XX:AdaptiveSizePolicyWeight=90 -Dsun.zip.disableMemoryMapping=true -Xms20m -Djava.security.egd=file:/dev/./urandom -Duser.home=/home/user'
+        name: JAVA_OPTS
+      - value: $(JAVA_OPTS)
+        name: MAVEN_OPTS
+  - mountSources: true
+    command:
+      - tail
+    args:
+      - '-f'
+      - /dev/null
+    memoryLimit: 32M
+    type: dockerimage
+    image: registry.access.redhat.com/ubi8/ubi-minimal
+    alias: ubi-minimal
+  - id: vscodevim/vim/latest
+    type: chePlugin
+commands:
+  - name: Package
+    actions:
+      - workdir: '${CHE_PROJECTS_ROOT}/quarkus-quickstarts/getting-started-command-mode'
+        type: exec
+        command: mvn package
+        component: centos-quarkus-maven
+  - name: Start Development mode (Hot reload + debug)
+    actions:
+      - workdir: '${CHE_PROJECTS_ROOT}/quarkus-quickstarts/getting-started-command-mode'
+        type: exec
+        command: 'read -p ''Enter your name [Eclipse Che]: '' name; name=${name:-''Eclipse Che''}; set -o xtrace; mvn compile quarkus:dev -Dquarkus.args="$name"'
+        component: centos-quarkus-maven
+  - name: Package Native
+    actions:
+      - workdir: '${CHE_PROJECTS_ROOT}/quarkus-quickstarts/getting-started-command-mode'
+        type: exec
+        command: mvn package -Dnative -Dmaven.test.skip
+        component: centos-quarkus-maven
+  - name: Start Native
+    actions:
+      - workdir: '${CHE_PROJECTS_ROOT}/quarkus-quickstarts/getting-started-command-mode/target'
+        type: exec
+        command: 'read -p ''Enter your name [Eclipse Che]: '' name; name=${name:-''Eclipse Che''}; set -o xtrace; ./getting-started-command-mode-1.0-SNAPSHOT-runner $name'
+        component: ubi-minimal
+  - name: Attach remote debugger
+    actions:
+      - referenceContent: |
+          {
+            "version": "0.2.0",
+            "configurations": [
+              {
+                "type": "java",
+                "request": "attach",
+                "name": "Attach to Remote Quarkus App",
+                "hostName": "localhost",
+                "port": 5005
+              }
+            ]
+          }
+        type: vscode-launch
